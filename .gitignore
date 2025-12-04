@@ -4,9 +4,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
-venv/
-ENV/
 build/
 develop-eggs/
 dist/
@@ -23,21 +20,15 @@ wheels/
 .installed.cfg
 *.egg
 
-# Streamlit
-# Keep .streamlit/config.toml but ignore other streamlit files
-.streamlit/secrets.toml
-.streamlit/credentials.toml
+# PyInstaller
+*.spec
+build/
+dist/
 
-# Exports
-exports/
-*.html
-*.csv
-
-# Database files (user data)
-*.db
-*.db-wal
-*.db-shm
-chat_merged*.db
+# Virtual environments
+venv/
+ENV/
+env/
 
 # IDE
 .vscode/
@@ -50,7 +41,29 @@ chat_merged*.db
 .DS_Store
 Thumbs.db
 
-# Temporary files
-*.tmp
-temp/
+# Data files (user-uploaded, sensitive)
+*.db
+*.db-wal
+*.db-shm
+chat.db*
 
+# Exports
+exports/
+test_output/
+
+# Temporary files
+temp_*
+*.tmp
+
+# NLTK data (users download their own)
+nltk_data/
+
+# Logs
+*.log
+
+# API keys (never commit!)
+.env
+*.key
+
+# Streamlit cache
+.streamlit/cache/

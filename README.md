@@ -1,10 +1,18 @@
 # iMessage Analyzer
 
-A privacy-first, local-only application for analyzing your iMessage conversations. This tool helps you understand your messaging patterns through three research questions:
+A privacy-first, local-only application for analyzing your iMessage conversations. This tool helps you understand your messaging patterns through nine research questions covering topic avoidance, conversation dynamics, and behavioral patterns.
 
-1. **RQ1**: What topics do you tend not to engage with?
-2. **RQ2**: What are your most commonly discussed topics?
-3. **RQ3**: How does your responsiveness differ between group chats and one-to-one conversations?
+## Research Questions
+
+1. **RQ1**: Topics you tend not to engage with (broad LDA topics)
+2. **RQ2**: Most commonly discussed topics
+3. **RQ3**: Group vs one-to-one responsiveness
+4. **RQ4**: Conversation starter topics (fine-grained)
+5. **RQ5**: Conversation ender topics (fine-grained)
+6. **RQ6**: Topics by closeness (close contacts vs acquaintances)
+7. **RQ7**: Topics by time of day
+8. **RQ8**: Fine-grained avoided topics (TF-IDF + K-Means)
+9. **RQ9**: GPT-powered chatbot for querying your behavior
 
 ## Features
 
@@ -13,8 +21,35 @@ A privacy-first, local-only application for analyzing your iMessage conversation
 - 🎨 **Interactive Visualizations**: Beautiful charts and graphs using Plotly.
 - 📁 **Export Reports**: Generate self-contained HTML reports and CSV exports.
 - 🔐 **De-identification**: Automatically pseudonymizes participants by default.
+- 🤖 **AI Chatbot**: Ask questions about your texting patterns using GPT (optional, requires API key)
 
-## Requirements
+## Local Application (No Python Needed)
+
+### Download Standalone App
+
+Download the standalone app from the [Releases](https://github.com/Alanshnir/imessage_analyzer_deployable/releases) section.
+
+### Run the App
+
+Double-click the file:
+- `run_analyzer` on macOS
+- `run_analyzer.exe` on Windows
+
+Your browser will open automatically to:
+**http://localhost:8501**
+
+### Upload and Analyze
+
+1. Accept the consent prompt
+2. Upload your `chat.db` file (found at `~/Library/Messages/chat.db`)
+   - Press **Cmd+Shift+G** in Finder and type `~/Library/Messages` to locate it
+3. Configure analysis settings in the sidebar
+4. Run any of the 9 research questions
+5. Explore your messaging patterns!
+
+**No Python installation required** - the app is fully self-contained.
+
+## Requirements (For Developers)
 
 - Python 3.10 or higher
 - macOS (for accessing iMessage database)
@@ -97,21 +132,38 @@ streamlit run viewer.py
 
 **Note**: Both apps are configured to accept files up to 2GB. If your file is larger, you may need to increase the limit in `.streamlit/config.toml`
 
+## Building a Standalone Executable
+
+Want to distribute the app as a single executable? See [build_instructions.md](build_instructions.md) for details.
+
+**Quick build:**
+```bash
+pip install pyinstaller
+pyinstaller --onefile --noconsole run_analyzer.py
+```
+
+The executable will be in `dist/run_analyzer` (or `dist/run_analyzer.exe` on Windows).
+
 ## Project Structure
 
 ```
 imessage_analyzer/
-├── app.py              # Streamlit main analyzer application
-├── viewer.py           # Simple message viewer app
-├── data_loader.py      # Database loading, WAL merging, SQL queries
-├── preprocess.py       # Text cleaning and preprocessing
-├── topics.py           # Topic modeling with Gensim/MALLET
-├── responses.py        # Response time calculations
-├── analytics.py        # RQ1, RQ2, RQ3 aggregation logic
-├── viz.py              # Plotting and visualization
-├── utils.py            # Utility functions (hashing, config)
-├── requirements.txt    # Python dependencies
-└── README.md           # This file
+├── app.py                    # Streamlit main analyzer application
+├── run_analyzer.py           # Launcher script for standalone builds
+├── viewer.py                 # Simple message viewer app
+├── data_loader.py            # Database loading, WAL merging, SQL queries
+├── preprocess.py             # Text cleaning and preprocessing
+├── topics.py                 # Topic modeling with Gensim/MALLET
+├── responses.py              # Response time calculations
+├── analytics.py              # RQ1-8 aggregation logic
+├── viz.py                    # Plotting and visualization
+├── chatbot.py                # RQ9 GPT-powered chatbot
+├── simple_topics.py          # RQ8 TF-IDF topic modeling
+├── embedding_topics.py       # Optional BERT-based topics
+├── utils.py                  # Utility functions (hashing, config)
+├── requirements.txt          # Python dependencies
+├── build_instructions.md     # PyInstaller build guide
+└── README.md                 # This file
 ```
 
 ## How It Works
@@ -136,19 +188,58 @@ imessage_analyzer/
 ### Research Questions
 
 **RQ1: Topics You Tend Not to Engage With**
-- Identifies topics in received messages
+- Identifies topics in received messages using LDA
 - Weights topics by response time/reluctance
 - Ranks topics by engagement reluctance
+- Supports 1-30 topics (user-configurable)
 
 **RQ2: Most Commonly Discussed Topics**
 - Analyzes topic distribution across all conversations
 - Shows topic prevalence per contact
 - Tracks topic trends over time
+- Supports 1-30 topics (user-configurable)
 
 **RQ3: Group vs One-to-One Responsiveness**
 - Compares reply rates and response times
 - Analyzes by group size categories
 - Identifies contacts you respond to more in groups
+- Filterable by minimum message count
+
+**RQ4: Conversation Starter Topics**
+- Uses fine-grained 50-topic model
+- Identifies topics that start conversations
+- Measures reply likelihood and response speed
+- Tracks session positioning
+
+**RQ5: Conversation Ender Topics**
+- Uses fine-grained 50-topic model
+- Identifies topics that end conversations
+- Measures no-reply rates and long response times
+- Tracks conversation termination patterns
+
+**RQ6: Topics by Closeness**
+- Compares close contacts vs acquaintances
+- Uses odds ratios to identify distinctive topics
+- User-configurable closeness thresholds
+- Fine-grained 50-topic analysis
+
+**RQ7: Topics by Time of Day**
+- Analyzes topics by time period (morning/afternoon/evening/night)
+- Heatmap visualization
+- Fine-grained 50-topic analysis
+- Shows when different topics are discussed
+
+**RQ8: Fine-Grained Avoided Topics**
+- Uses TF-IDF + K-Means clustering
+- 15-50 topics (user-configurable)
+- More granular than RQ1
+- No heavy dependencies required
+
+**RQ9: GPT-Powered Chatbot**
+- Ask questions about your texting patterns in plain English
+- Uses aggregated statistics only (privacy-first)
+- Requires OpenAI API key (user-provided)
+- No raw messages sent to API
 
 ## Privacy & Security
 
