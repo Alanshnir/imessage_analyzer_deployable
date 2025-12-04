@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Streamlit
+# Keep .streamlit/config.toml but ignore other streamlit files
+.streamlit/secrets.toml
+.streamlit/credentials.toml
+
+# Exports
+exports/
+*.html
+*.csv
+
+# Database files (user data)
+*.db
+*.db-wal
+*.db-shm
+chat_merged*.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+temp/
+

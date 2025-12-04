@@ -1,0 +1,12 @@
+# RQ8 Dependencies (Simple TF-IDF + K-Means Version)
+# RQ8 now uses a lightweight approach that only requires scikit-learn
+
+# NO ADDITIONAL PACKAGES NEEDED!
+# RQ8 uses only scikit-learn, which is already included in the base requirements.
+
+# If you want to try the embedding-based version (optional, not currently used):
+# torch>=2.0.0
+# sentence-transformers>=2.2.0
+# umap-learn>=0.5.3
+# hdbscan>=0.8.29
+
