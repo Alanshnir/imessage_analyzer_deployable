@@ -19,8 +19,14 @@ def is_port_open(host='localhost', port=8501, timeout=1):
 def main():
     print("Starting iMessage Analyzer...")
     
-    # Path to app.py inside the same folder
-    app_path = os.path.join(os.path.dirname(__file__), "app.py")
+    # Path to app.py - handle both development and PyInstaller bundled mode
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller bundle
+        bundle_dir = sys._MEIPASS
+        app_path = os.path.join(bundle_dir, "app.py")
+    else:
+        # Running as normal Python script
+        app_path = os.path.join(os.path.dirname(__file__), "app.py")
 
     # Launch Streamlit
     print("Launching Streamlit server...")

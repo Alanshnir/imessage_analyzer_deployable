@@ -65,5 +65,5 @@ nltk_data/
 .env
 *.key
 
-# Streamlit cache
+# Streamlit cache (but keep config.toml)
 .streamlit/cache/
