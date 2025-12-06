@@ -326,10 +326,6 @@ def main():
         key="user_consent"
     )
     
-    st.info("💡 **Tip**: Please adjust settings in the left-hand panel menu before loading your chat.db file.")
-    
-    uploaded_file = None  # Initialize to avoid UnboundLocalError
-    
     if not consent:
         st.warning("⚠️ Please review and accept the consent above to proceed with file upload.")
         st.info("""
@@ -337,12 +333,10 @@ def main():
         - You understand this tool processes your personal message data
         - Analysis happens locally on your computer (no data uploaded to external servers by default)
         - You use this tool at your own discretion
-        - Optional RQ6 chatbot feature sends only aggregated statistics to OpenAI (if you choose to use it)
+        - Optional RQ9 chatbot feature sends only aggregated statistics to OpenAI (if you choose to use it)
         """)
+        uploaded_files = None
     else:
-        # Important warning about closing Messages app
-        st.warning("⚠️ **IMPORTANT**: You must close the Messages app before uploading your chat.db file! The database file is locked while Messages is running and cannot be read.")
-        
         # Show instructions for finding chat.db
         with st.expander("📖 How to find your chat.db file"):
             st.markdown("""
@@ -351,48 +345,61 @@ def main():
             `~/Library/Messages/chat.db`
             
             **To locate it:**
-            1. **Close the Messages app** (Quit Messages from the menu bar or Cmd+Q)
-            2. Open **Finder**
-            3. Press **Cmd+Shift+G** (Go to Folder)
-            4. Type: `~/Library/Messages`
-            5. Press Enter
-            6. Look for `chat.db`
+            1. Open **Finder**
+            2. Press **Cmd+Shift+G** (Go to Folder)
+            3. Type: `~/Library/Messages`
+            4. Press Enter
+            5. Look for `chat.db` (and optionally `chat.db-wal` and `chat.db-shm`)
             
-            **Note:** You may need to copy the file to your Desktop first, as the Library folder is protected.
+            **Note:** You may need to copy these files to your Desktop first, as the Library folder is protected.
             """)
         
-        uploaded_file = st.file_uploader(
-            "Select your chat.db file:",
-            type=['db'],
-            accept_multiple_files=False,
-            help="Located at ~/Library/Messages/chat.db - Press Cmd+Shift+G in Finder to navigate there. Make sure Messages app is closed!"
+        uploaded_files = st.file_uploader(
+            "Select your chat.db file (and optionally chat.db-wal, chat.db-shm):",
+            type=['db', 'db-wal', 'db-shm'],
+            accept_multiple_files=True,
+            help="Located at ~/Library/Messages/chat.db - Press Cmd+Shift+G in Finder to navigate there"
         )
     
-    if uploaded_file:
-        st.warning("⏱️ Loading messages may take up to 30 minutes for large databases (500k+ messages). Please be patient.")
+    if uploaded_files:
+        # Detect file types
+        db_file = None
+        wal_file = None
+        shm_file = None
         
-        if st.button("Load Messages", type="primary"):
-            with st.spinner("Loading messages from database..."):
-                try:
-                    # Pass as a list to maintain compatibility with load_messages function
-                    df = load_messages([uploaded_file], deidentify=deidentify)
-                    st.session_state.messages_df = df
-                    st.session_state.deidentify = deidentify  # Store deidentify setting
-                    if 'temp_dir' in df.attrs:
-                        st.session_state.temp_dir = df.attrs.get('temp_dir')
-                    
-                    # Clear response time cache when new data is loaded
-                    if 'df_with_rt_cache_key' in st.session_state:
-                        del st.session_state.df_with_rt_cache_key
-                    if 'df_with_rt' in st.session_state:
-                        del st.session_state.df_with_rt
-                    if 'received_with_rt' in st.session_state:
-                        del st.session_state.received_with_rt
-                    
-                    st.success(f"✅ Loaded {len(df):,} messages")
-                except Exception as e:
-                    st.error(f"❌ Error loading messages: {e}")
-                    st.exception(e)
+        for f in uploaded_files:
+            if f.name == "chat.db":
+                db_file = f
+            elif f.name == "chat.db-wal":
+                wal_file = f
+            elif f.name == "chat.db-shm":
+                shm_file = f
+        
+        if db_file is None:
+            st.error("❌ Please upload chat.db file")
+        else:
+            st.warning("⏱️ Loading messages may take up to 30 minutes for large databases (500k+ messages). Please be patient.")
+            
+            if st.button("Load Messages", type="primary"):
+                with st.spinner("Loading messages from database..."):
+                    try:
+                        df = load_messages(uploaded_files, deidentify=deidentify)
+                        st.session_state.messages_df = df
+                        if 'temp_dir' in df.attrs:
+                            st.session_state.temp_dir = df.attrs.get('temp_dir')
+                        
+                        # Clear response time cache when new data is loaded
+                        if 'df_with_rt_cache_key' in st.session_state:
+                            del st.session_state.df_with_rt_cache_key
+                        if 'df_with_rt' in st.session_state:
+                            del st.session_state.df_with_rt
+                        if 'received_with_rt' in st.session_state:
+                            del st.session_state.received_with_rt
+                        
+                        st.success(f"✅ Loaded {len(df):,} messages")
+                    except Exception as e:
+                        st.error(f"❌ Error loading messages: {e}")
+                        st.exception(e)
     
     # Data snapshot
     if st.session_state.messages_df is not None:
@@ -627,16 +634,14 @@ def main():
         
         st.markdown("---")  # Separator before research questions
         
-        # Preprocessing - use ALL messages (sent + received) for topic modeling
+        # Preprocessing - must match order of received_with_rt
         with st.spinner("Preprocessing text..."):
-            if len(df_with_rt) > 0:
+            if len(received_with_rt) > 0:
                 # Get custom stopwords and disabled metadata stopwords from session state
                 custom_stopwords = st.session_state.get('custom_stopwords', set())
                 disabled_metadata_stopwords = st.session_state.get('disabled_metadata_stopwords', set())
-                
-                # Preprocess ALL messages (sent + received) for topic modeling
-                processed_docs_all = preprocess_documents(
-                    df_with_rt['text'],
+                processed_docs = preprocess_documents(
+                    received_with_rt['text'],
                     lowercase=lowercase,
                     remove_stopwords=remove_stopwords,
                     remove_emojis_flag=remove_emojis_flag,
@@ -647,34 +652,12 @@ def main():
                     disabled_metadata_stopwords=disabled_metadata_stopwords,
                     remove_metadata_tokens=False  # Disable aggressive metadata filtering to keep real words
                 )
-                
-                # Also create processed_docs for received only (for backward compatibility with preview)
-                if len(received_with_rt) > 0:
-                    processed_docs_received = preprocess_documents(
-                        received_with_rt['text'],
-                        lowercase=lowercase,
-                        remove_stopwords=remove_stopwords,
-                        remove_emojis_flag=remove_emojis_flag,
-                        stem=stem,
-                        lemmatize=lemmatize,
-                        min_length=min_length,
-                        custom_stopwords=custom_stopwords,
-                        disabled_metadata_stopwords=disabled_metadata_stopwords,
-                        remove_metadata_tokens=False
-                    )
-                else:
-                    processed_docs_received = []
-                
-                # Store for display (use received for preview, but all for topic modeling)
-                st.session_state.processed_docs = processed_docs_received
-                st.session_state.processed_docs_all = processed_docs_all  # All messages for topic modeling
+                # Store for display
+                st.session_state.processed_docs = processed_docs
                 st.session_state.received_with_rt = received_with_rt
-                st.session_state.df_with_rt = df_with_rt  # Store all messages
             else:
-                processed_docs_all = []
-                processed_docs_received = []
+                processed_docs = []
                 st.session_state.processed_docs = []
-                st.session_state.processed_docs_all = []
         
         # Display preprocessed data preview
         if 'processed_docs' in st.session_state and len(st.session_state.processed_docs) > 0:
@@ -730,164 +713,81 @@ def main():
         st.markdown("""
         **Methodology**: For each received message, we compute response time until your next reply.
         Messages with longer response times (or no reply) are assigned higher "reluctance scores."
-        We train LDA on **all aggregated messages** (sent + received) and then weight topics by reluctance scores
-        (computed only on received messages) to identify topics you're less likely to engage with.
-        
-        **Estimated time**: 2-15 minutes depending on dataset size (optimized for speed).
+        We train LDA on received messages and weight topics by reluctance scores to identify
+        topics you're less likely to engage with.
         """)
         
-        processed_docs_all = st.session_state.get('processed_docs_all', [])
-        if len(processed_docs_all) > 0 and len(received_with_rt) > 0:
+        if len(processed_docs) > 0 and len(received_with_rt) > 0:
             if st.button("Run RQ1 Analysis", key="rq1"):
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                try:
-                    # Step 1: Train LDA on ALL messages (sent + received)
-                    status_text.text("Step 1/4: Training topic model on all messages...")
-                    progress_bar.progress(10)
-                    
-                    model, dictionary, corpus, doc_topics_all = train_lda(
-                        processed_docs_all,
-                        num_topics=num_topics,
-                        passes=passes,
-                        alpha=alpha,
-                        beta=beta,
-                        use_mallet=use_mallet,
-                        mallet_home=mallet_home if use_mallet else None
-                    )
-                    
-                    progress_bar.progress(40)
-                    
-                    # Step 2: Map received messages to all messages (OPTIMIZED: O(N+M) instead of O(N*M))
-                    status_text.text("Step 2/4: Mapping received messages to topic model...")
-                    df_with_rt_aligned = st.session_state.get('df_with_rt', df_with_rt).reset_index(drop=True)
-                    received_with_rt_aligned = received_with_rt.reset_index(drop=True)
-                    
-                    # Build lookup dictionaries for O(1) access
-                    # Index by guid (most reliable)
-                    guid_to_index = {}
-                    if 'guid' in df_with_rt_aligned.columns:
-                        for idx, guid in enumerate(df_with_rt_aligned['guid']):
-                            if pd.notna(guid) and guid not in guid_to_index:
-                                guid_to_index[guid] = idx
-                    
-                    # Index by (timestamp, text, direction) as fallback
-                    key_to_index = {}
-                    for idx, row in df_with_rt_aligned.iterrows():
-                        key = (
-                            row.get('timestamp_local'),
-                            str(row.get('text', '')),
-                            row.get('direction', '')
+                with st.spinner("Training topic model and computing reluctance scores..."):
+                    try:
+                        # Train LDA on received messages
+                        model, dictionary, corpus, doc_topics = train_lda(
+                            processed_docs,
+                            num_topics=num_topics,
+                            passes=passes,
+                            alpha=alpha,
+                            beta=beta,
+                            use_mallet=use_mallet,
+                            mallet_home=mallet_home if use_mallet else None
                         )
-                        if key not in key_to_index:
-                            key_to_index[key] = idx
-                    
-                    # Map received messages to all messages using lookups (O(N) instead of O(N*M))
-                    received_indices_in_all = []
-                    for recv_idx, recv_row in received_with_rt_aligned.iterrows():
-                        idx_match = None
                         
-                        # Try matching by guid first (O(1) lookup)
-                        if 'guid' in recv_row and pd.notna(recv_row['guid']):
-                            idx_match = guid_to_index.get(recv_row['guid'])
-                        
-                        # Fallback: match by timestamp + text + direction (O(1) lookup)
-                        if idx_match is None:
-                            key = (
-                                recv_row.get('timestamp_local'),
-                                str(recv_row.get('text', '')),
-                                'in'  # received messages are always 'in'
-                            )
-                            idx_match = key_to_index.get(key)
-                        
-                        received_indices_in_all.append(idx_match)
-                    
-                    # Extract doc_topics for only received messages
-                    doc_topics_received = []
-                    for idx in received_indices_in_all:
-                        if idx is not None and idx < len(doc_topics_all):
-                            doc_topics_received.append(doc_topics_all[idx])
-                        else:
-                            # If no match, create zero vector (shouldn't happen, but safe fallback)
-                            doc_topics_received.append(np.zeros(num_topics))
-                    
-                    doc_topics = doc_topics_received
-                    progress_bar.progress(60)
-                    
-                    # Step 3: Rank reluctant topics
-                    status_text.text("Step 3/4: Computing reluctance scores and ranking topics...")
-                    
-                    # Ensure received_with_rt has reluctance_score column (vectorized computation)
-                    if 'reluctance_score' not in received_with_rt.columns:
-                        from responses import compute_reluctance_score
-                        cap_minutes = max_gap_minutes
-                        # Vectorized computation using apply (faster than loop)
-                        received_with_rt = received_with_rt.copy()
-                        received_with_rt['reluctance_score'] = received_with_rt.apply(
-                            lambda row: compute_reluctance_score(
-                                row.get('response_time_min', np.nan),
-                                row.get('got_reply', False),
-                                cap_minutes
-                            ),
-                            axis=1
+                        # Rank reluctant topics (this also computes reluctance_score and adds it to a copy)
+                        rq1_df = rank_reluctant_topics(
+                            received_with_rt,
+                            doc_topics,
+                            model,
+                            dictionary
                         )
-                    
-                    rq1_df = rank_reluctant_topics(
-                        received_with_rt,
-                        doc_topics,
-                        model,
-                        dictionary
-                    )
-                    
-                    progress_bar.progress(80)
-                    
-                    # Step 4: Get examples and contact stats
-                    status_text.text("Step 4/4: Generating examples and contact statistics...")
-                    
-                    # Get top reluctant topic IDs
-                    top_topic_ids = rq1_df.head(5)['topic_id'].tolist()
-                    
-                    # Get message examples for top reluctant topics
-                    topic_examples = get_reluctant_topic_examples(
-                        received_with_rt,
-                        doc_topics,
-                        top_topic_ids,
-                        num_examples=5
-                    )
-                    
-                    # Get contact-level statistics
-                    # Pass df_with_rt to compute total messages (sent + received) per contact
-                    df_with_rt_for_rq1 = st.session_state.get('df_with_rt', None)
-                    contact_stats = get_contact_reluctant_topic_stats(
-                        received_with_rt,
-                        doc_topics,
-                        top_topic_ids,
-                        df_all=df_with_rt_for_rq1
-                    )
-                    
-                    progress_bar.progress(100)
-                    status_text.text("✅ Complete!")
-                    
-                    st.session_state.rq1_df = rq1_df
-                    st.session_state.rq1_model = model  # Model trained on ALL messages
-                    st.session_state.rq1_dictionary = dictionary  # Dictionary from ALL messages
-                    st.session_state.rq1_doc_topics = doc_topics  # Doc topics for received messages only (for RQ1/RQ4)
-                    st.session_state.rq1_doc_topics_all = doc_topics_all  # Doc topics for ALL messages (for reference)
-                    st.session_state.rq1_topic_examples = topic_examples
-                    st.session_state.rq1_contact_stats = contact_stats
-                    
-                    # Update received_with_rt in session to include reluctance scores
-                    st.session_state.received_with_rt = received_with_rt
-                    
-                    progress_bar.empty()
-                    status_text.empty()
-                    st.success("✅ RQ1 analysis complete (topics learned from all messages)")
-                except Exception as e:
-                    progress_bar.empty()
-                    status_text.empty()
-                    st.error(f"❌ Error in RQ1 analysis: {e}")
-                    st.exception(e)
+                        
+                        # Ensure received_with_rt has reluctance_score column
+                        # rank_reluctant_topics computes it internally, so we need to add it
+                        if 'reluctance_score' not in received_with_rt.columns:
+                            from responses import compute_reluctance_score
+                            cap_minutes = max_gap_minutes
+                            reluctance_scores = []
+                            for idx, row in received_with_rt.iterrows():
+                                score = compute_reluctance_score(
+                                    row.get('response_time_min', np.nan),
+                                    row.get('got_reply', False),
+                                    cap_minutes
+                                )
+                                reluctance_scores.append(score)
+                            received_with_rt = received_with_rt.copy()
+                            received_with_rt['reluctance_score'] = reluctance_scores
+                        
+                        # Get top reluctant topic IDs
+                        top_topic_ids = rq1_df.head(5)['topic_id'].tolist()
+                        
+                        # Get message examples for top reluctant topics
+                        topic_examples = get_reluctant_topic_examples(
+                            received_with_rt,
+                            doc_topics,
+                            top_topic_ids,
+                            num_examples=5
+                        )
+                        
+                        # Get contact-level statistics
+                        contact_stats = get_contact_reluctant_topic_stats(
+                            received_with_rt,
+                            doc_topics,
+                            top_topic_ids
+                        )
+                        
+                        st.session_state.rq1_df = rq1_df
+                        st.session_state.rq1_model = model
+                        st.session_state.rq1_dictionary = dictionary
+                        st.session_state.rq1_doc_topics = doc_topics
+                        st.session_state.rq1_topic_examples = topic_examples
+                        st.session_state.rq1_contact_stats = contact_stats
+                        
+                        # Update received_with_rt in session to include reluctance scores
+                        st.session_state.received_with_rt = received_with_rt
+                        
+                        st.success("✅ RQ1 analysis complete")
+                    except Exception as e:
+                        st.error(f"❌ Error in RQ1 analysis: {e}")
+                        st.exception(e)
         
         if 'rq1_df' in st.session_state:
             rq1_df = st.session_state.rq1_df
@@ -943,9 +843,9 @@ def main():
                 if len(contact_stats) > 0:
                     # Add filter slider that applies to both graphs
                     min_messages_filter_rq1_graphs = st.slider(
-                        "Minimum total messages (sent + received) to include contact in graphs:",
+                        "Minimum messages to include contact in graphs:",
                         min_value=10,
-                        max_value=5000,
+                        max_value=500,
                         value=50,
                         step=10,
                         key="rq1_graphs_min_messages"
@@ -1021,66 +921,54 @@ def main():
                                             (received_for_search['participant'] == search_contact_rq1) |
                                             (received_for_search['chat_name'] == search_contact_rq1)
                                         ].copy()
+                                    
+                                    if len(contact_messages) > 0:
+                                        contact_messages['date'] = pd.to_datetime(contact_messages['timestamp_local']).dt.date
                                         
-                                        # Ensure reluctance_score exists
-                                        if 'reluctance_score' not in contact_messages.columns:
-                                            from responses import compute_reluctance_score
-                                            contact_messages['reluctance_score'] = contact_messages.apply(
-                                                lambda r: compute_reluctance_score(
-                                                    r.get('response_time_min', np.nan),
-                                                    r.get('got_reply', False),
-                                                    max_gap_minutes
-                                                ),
-                                                axis=1
-                                            )
+                                        # Count total received per day
+                                        daily_total_received = contact_messages.groupby('date').size().reset_index(name='total_received')
                                         
-                                        if len(contact_messages) > 0:
-                                            contact_messages['date'] = pd.to_datetime(contact_messages['timestamp_local']).dt.date
-                                            
-                                            # Count total received per day
-                                            daily_total_received = contact_messages.groupby('date').size().reset_index(name='total_received')
-                                            
-                                            # Count high reluctance per day (reluctance >= 0.7)
-                                            high_reluctance_msgs = contact_messages[contact_messages['reluctance_score'] >= 0.7]
-                                            daily_high_reluctance = high_reluctance_msgs.groupby('date').size().reset_index(name='high_reluctance')
-                                            
-                                            # Merge
-                                            daily_combined = daily_total_received.merge(daily_high_reluctance, on='date', how='left')
-                                            daily_combined['high_reluctance'] = daily_combined['high_reluctance'].fillna(0)
-                                            
-                                            # Plot
-                                            import plotly.graph_objects as go
-                                            
-                                            fig_reluctance_time = go.Figure()
-                                            
-                                            fig_reluctance_time.add_trace(go.Scatter(
-                                                x=daily_combined['date'],
-                                                y=daily_combined['total_received'],
-                                                mode='lines',
-                                                name='Total Messages Received',
-                                                line=dict(color='blue', width=2)
-                                            ))
-                                            
-                                            fig_reluctance_time.add_trace(go.Scatter(
-                                                x=daily_combined['date'],
-                                                y=daily_combined['high_reluctance'],
-                                                mode='lines',
-                                                name='High Reluctance Messages',
-                                                line=dict(color='red', width=2)
-                                            ))
-                                            
-                                            fig_reluctance_time.update_layout(
-                                                title=f"Messages from {search_contact_rq1} Over Time",
-                                                xaxis_title="Date",
-                                                yaxis_title="Number of Messages",
-                                                height=400,
-                                                hovermode='x unified'
-                                            )
-                                            
-                                            try:
-                                                st.plotly_chart(fig_reluctance_time, use_container_width=True)
-                                            except:
-                                                st.info("Graph not available")
+                                        # Count high reluctance per day (reluctance >= 0.7)
+                                        high_reluctance_msgs = contact_messages[contact_messages['reluctance_score'] >= 0.7]
+                                        daily_high_reluctance = high_reluctance_msgs.groupby('date').size().reset_index(name='high_reluctance')
+                                        
+                                        # Merge
+                                        daily_combined = daily_total_received.merge(daily_high_reluctance, on='date', how='left')
+                                        daily_combined['high_reluctance'] = daily_combined['high_reluctance'].fillna(0)
+                                        
+                                        # Plot
+                                        import plotly.graph_objects as go
+                                        
+                                        fig_reluctance_time = go.Figure()
+                                        
+                                        fig_reluctance_time.add_trace(go.Scatter(
+                                            x=daily_combined['date'],
+                                            y=daily_combined['total_received'],
+                                            mode='lines',
+                                            name='Total Messages Received',
+                                            line=dict(color='blue', width=2)
+                                        ))
+                                        
+                                        fig_reluctance_time.add_trace(go.Scatter(
+                                            x=daily_combined['date'],
+                                            y=daily_combined['high_reluctance'],
+                                            mode='lines',
+                                            name='High Reluctance Messages',
+                                            line=dict(color='red', width=2)
+                                        ))
+                                        
+                                        fig_reluctance_time.update_layout(
+                                            title=f"Messages from {search_contact_rq1} Over Time",
+                                            xaxis_title="Date",
+                                            yaxis_title="Number of Messages",
+                                            height=400,
+                                            hovermode='x unified'
+                                        )
+                                        
+                                        try:
+                                            st.plotly_chart(fig_reluctance_time, use_container_width=True)
+                                        except:
+                                            st.info("Graph not available")
                                     else:
                                         st.info("No messages found for this contact")
                             elif search_contact_rq1:
@@ -1093,25 +981,22 @@ def main():
                     
                     # User-controlled minimum message filter
                     min_messages_rq1 = st.slider(
-                        "Minimum total messages (sent + received) to include contact:",
+                        "Minimum total messages to include contact:",
                         min_value=50,
-                        max_value=5000,
+                        max_value=1000,
                         value=500,
                         step=50,
                         key="rq1_min_messages_proportion"
                     )
                     
-                    st.markdown(f"*Showing contacts with {min_messages_rq1}+ total messages, ranked by percentage of high reluctance messages*")
+                    st.markdown(f"*Showing contacts with {min_messages_rq1}+ messages, ranked by percentage of high reluctance messages*")
                     
                     # Get proportion-based statistics
-                    # Pass df_with_rt to compute total messages (sent + received) per contact
-                    df_with_rt_for_rq1_prop = st.session_state.get('df_with_rt', None)
                     proportion_stats = get_contact_reluctance_proportions(
                         received_with_rt,
                         st.session_state.rq1_doc_topics,
                         top_topic_ids,
-                        min_messages=min_messages_rq1,
-                        df_all=df_with_rt_for_rq1_prop
+                        min_messages=min_messages_rq1
                     )
                     
                     if len(proportion_stats) > 0:
@@ -1127,56 +1012,72 @@ def main():
         # RQ2: Most commonly discussed topics
         st.header("💭 RQ2: Most Commonly Discussed Topics")
         st.markdown("""
-        **Methodology**: Uses the **same topic model from RQ1** (learned from all aggregated messages) 
-        to analyze topic distribution across different chats/contacts and how topics evolve over time.
-        
-        **Key Feature**: All RQs (RQ1, RQ2, RQ4) use the same topics learned from ALL your messages, 
-        then we show how each chat/contact has a different mix of these same topics.
+        **Methodology**: We train LDA on all messages (grouped by chat or time period) to identify
+        the main topics of conversation. We then analyze topic distribution per contact and how
+        topics evolve over time.
         """)
         
         if len(df) > 0:
-            if 'rq1_model' in st.session_state and 'rq1_doc_topics_all' in st.session_state:
-                if st.button("Run RQ2 Analysis", key="rq2"):
-                    with st.spinner("Analyzing topic distribution using RQ1 topics..."):
-                        try:
-                            # Use RQ1's model and topics (for all messages)
-                            model = st.session_state.rq1_model
-                            dictionary = st.session_state.rq1_dictionary
-                            doc_topics_all = st.session_state.rq1_doc_topics_all
-                            
-                            # Get topic words and message counts (RQ2 Enhancement)
-                            topic_message_counts = get_topic_message_counts(doc_topics_all, topic_threshold=0.3)
-                            
-                            num_topics = len(doc_topics_all[0]) if doc_topics_all else 0
-                            topic_words_list = []
-                            for topic_id in range(num_topics):
-                                words = get_topic_words(model, dictionary, topic_id, num_words=30)
-                                topic_words_list.append({
-                                    'topic_id': topic_id,
-                                    'top_words': ', '.join([w for w, _ in words]),
-                                    'message_count': topic_message_counts.get(topic_id, 0)
-                                })
-                            topic_words_df = pd.DataFrame(topic_words_list)
-                            
-                            # Per-contact topic mix (using all messages doc_topics)
-                            contact_topic_df = get_per_contact_topic_mix(df, doc_topics_all, top_n_contacts=10)
-                            
-                            # Topic over time (using all messages doc_topics)
-                            time_topic_df = topic_over_time(df, doc_topics_all, freq='M')
-                            
-                            st.session_state.rq2_model = model
-                            st.session_state.rq2_dictionary = dictionary
-                            st.session_state.rq2_doc_topics = doc_topics_all
-                            st.session_state.rq2_topic_words = topic_words_df
-                            st.session_state.rq2_contact_topic = contact_topic_df
-                            st.session_state.rq2_time_topic = time_topic_df
-                            
-                            st.success("✅ RQ2 analysis complete (using RQ1 topics)")
-                        except Exception as e:
-                            st.error(f"❌ Error in RQ2 analysis: {e}")
-                            st.exception(e)
-            else:
-                st.info("ℹ️ Run RQ1 first to generate topics for RQ2 analysis")
+            if st.button("Run RQ2 Analysis", key="rq2"):
+                with st.spinner("Training topic model on all messages..."):
+                    try:
+                        # Preprocess all messages
+                        custom_stopwords = st.session_state.get('custom_stopwords', set())
+                        disabled_metadata_stopwords = st.session_state.get('disabled_metadata_stopwords', set())
+                        all_processed = preprocess_documents(
+                            df['text'],
+                            lowercase=lowercase,
+                            remove_stopwords=remove_stopwords,
+                            remove_emojis_flag=remove_emojis_flag,
+                            stem=stem,
+                            lemmatize=lemmatize,
+                            min_length=min_length,
+                            custom_stopwords=custom_stopwords,
+                            disabled_metadata_stopwords=disabled_metadata_stopwords,
+                            remove_metadata_tokens=False  # Disable aggressive metadata filtering to keep real words
+                        )
+                        
+                        # Train LDA
+                        model, dictionary, corpus, doc_topics = train_lda(
+                            all_processed,
+                            num_topics=num_topics,
+                            passes=passes,
+                            alpha=alpha,
+                            beta=beta,
+                            use_mallet=use_mallet,
+                            mallet_home=mallet_home if use_mallet else None
+                        )
+                        
+                        # Get topic words and message counts (RQ2 Enhancement)
+                        topic_message_counts = get_topic_message_counts(doc_topics, topic_threshold=0.3)
+                        
+                        topic_words_list = []
+                        for topic_id in range(num_topics):
+                            words = get_topic_words(model, dictionary, topic_id, num_words=30)
+                            topic_words_list.append({
+                                'topic_id': topic_id,
+                                'top_words': ', '.join([w for w, _ in words]),
+                                'message_count': topic_message_counts.get(topic_id, 0)
+                            })
+                        topic_words_df = pd.DataFrame(topic_words_list)
+                        
+                        # Per-contact topic mix
+                        contact_topic_df = get_per_contact_topic_mix(df, doc_topics, top_n_contacts=10)
+                        
+                        # Topic over time
+                        time_topic_df = topic_over_time(df, doc_topics, freq='M')
+                        
+                        st.session_state.rq2_model = model
+                        st.session_state.rq2_dictionary = dictionary
+                        st.session_state.rq2_doc_topics = doc_topics
+                        st.session_state.rq2_topic_words = topic_words_df
+                        st.session_state.rq2_contact_topic = contact_topic_df
+                        st.session_state.rq2_time_topic = time_topic_df
+                        
+                        st.success("✅ RQ2 analysis complete")
+                    except Exception as e:
+                        st.error(f"❌ Error in RQ2 analysis: {e}")
+                        st.exception(e)
         
         if 'rq2_topic_words' in st.session_state:
             st.subheader("Topic Words")
@@ -1331,7 +1232,7 @@ def main():
                 # User-controlled filtering
                 st.subheader("Contacts You Respond to More in Groups")
                 min_messages_filter = st.slider(
-                    "Minimum total messages in order to include contact (if a contact does not appear, then that means you do not respond at higher probability to them in groups):",
+                    "Minimum total messages to include:",
                     min_value=0,
                     max_value=int(contact_comp['total_messages_with_contact'].max()),
                     value=10,
@@ -1416,9 +1317,9 @@ def main():
         # RQ4: Conversation Starter Topics
         st.header("🚀 RQ4: Conversation Starter Topics")
         st.markdown("""
-        **Methodology**: Using the same topic model from RQ1 (learned from **all aggregated messages**) 
-        to identify which topics start conversations. Topics that are conversation starters are more 
-        likely to receive replies, have shorter response times, and often appear at the beginning of message threads.
+        **Methodology**: Using the same topic model from RQ1 to identify which topics start conversations.
+        Topics that are conversation starters are more likely to receive replies,
+        have shorter response times, and often appear at the beginning of message threads.
         """)
         
         if len(received_with_rt) > 0 and 'rq1_doc_topics' in st.session_state:
@@ -1465,295 +1366,303 @@ def main():
                 except:
                     st.pyplot(fig)
         
-        # RQ5: Sentiment Analysis of Text Messages
-        st.header("😊 RQ5: Sentiment Analysis of Text Messages")
+        # RQ5 (Future): Placeholder for additional analysis
+        
+        # RQ8: Fine-Grained Topics You Tend Not to Engage With
+        st.header("🔬 RQ5: Fine-Grained Topics You Tend Not to Engage With")
         st.markdown("""
-        **Methodology**: Uses **VADER (Valence Aware Dictionary and sEntiment Reasoner)** sentiment analysis.
+        **Methodology**: Using **fine-grained topic modeling (50 topics)** for higher resolution.
+        Topics that end conversations are associated with no replies,
+        longer response times, or appear as the last messages in conversation sessions.
         
-        VADER is specifically attuned to sentiments expressed in social media and works well with:
-        - Emoticons and emojis
-        - Slang and informal language
-        - Punctuation (!!!, ???)
-        - Capitalization (AMAZING!!!)
-        
-        **Sentiment Score**: Ranges from -1 (very negative) to +1 (very positive)
-        
-        **Thresholds**:
-        - **Positive**: score ≥ 0.05
-        - **Negative**: score ≤ -0.05
-        - **Neutral**: -0.05 < score < 0.05
+        **Fine-Grained Model**: Same 50-topic LDA model as RQ4 to capture nuanced conversation dynamics.
         """)
         
-        # Compute sentiment (cached in session state)
-        if 'df_with_sentiment' not in st.session_state and len(df_with_rt) > 0:
-            if st.button("Compute Sentiment for All Messages", key="rq5_compute"):
+        if len(received_with_rt) > 0 and 'fine_doc_topics' in st.session_state:
+            if st.button("Run RQ5 Analysis", key="rq5"):
+                with st.spinner("Analyzing conversation ender topics..."):
+                    try:
+                        rq5_enders = analyze_conversation_enders(
+                            received_with_rt,
+                            st.session_state.fine_doc_topics,
+                            topic_threshold=0.3,
+                            session_gap_minutes=180.0
+                        )
+                        
+                        # Add top_words column
+                        rq5_enders['top_words'] = rq5_enders['topic_id'].apply(
+                            lambda tid: ', '.join([w for w, _ in get_topic_words(
+                                st.session_state.fine_model, 
+                                st.session_state.fine_dictionary, 
+                                tid, 
+                                num_words=30
+                            )])
+                        )
+                        
+                        st.session_state.rq5_enders = rq5_enders
+                        st.success("✅ RQ5 analysis complete")
+                    except Exception as e:
+                        st.error(f"❌ Error in RQ5 analysis: {e}")
+                        st.exception(e)
+        
+        if 'rq5_enders' in st.session_state and 'fine_model' in st.session_state:
+            rq5_enders = st.session_state.rq5_enders
+            
+            st.subheader("Top Conversation Ender Topics")
+            st.dataframe(rq5_enders[['topic_id', 'top_words', 'ender_score', 'no_reply_rate', 
+                                     'avg_response_time', 'ender_probability', 'message_count']].head(15))
+            
+            fig = plot_conversation_enders(rq5_enders, st.session_state.fine_model, 
+                                          st.session_state.fine_dictionary, top_n=10, use_plotly=True)
+            if fig:
                 try:
-                    from sentiment import compute_sentiment, global_sentiment_summary, sentiment_over_time
+                    st.plotly_chart(fig, use_container_width=True)
+                except:
+                    st.pyplot(fig)
+        
+        # RQ6: Topics by Closeness (Close Contacts vs Acquaintances) - Fine-Grained Model
+        st.header("👨‍👩‍👧‍👦 RQ6: Topics by Closeness")
+        st.markdown("""
+        **Methodology**: Using **fine-grained topic modeling (50 topics)** trained on ALL messages.
+        Compare topic distributions between close contacts (high message count
+        and mutual reply rate) and acquaintances.
+        
+        **Fine-Grained Model**: Single 50-topic model trained on all texts, then split by contact type.
+        **Odds Ratio**: (topic freq among close) / (topic freq among acquaintances).
+        Higher odds ratio = more prevalent among close contacts.
+        """)
+        
+        # User controls for closeness definition
+        col1, col2 = st.columns(2)
+        with col1:
+            close_min_messages = st.number_input(
+                "Minimum messages for close contact:",
+                min_value=10,
+                value=100,
+                step=10,
+                key="rq6_min_messages"
+            )
+        with col2:
+            close_min_reply_rate = st.slider(
+                "Minimum reply rate for close contact:",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.5,
+                step=0.05,
+                key="rq6_min_reply_rate"
+            )
+        
+        if len(received_with_rt) > 0 and 'fine_doc_topics' in st.session_state:
+            if st.button("Run RQ6 Analysis", key="rq6"):
+                with st.spinner("Analyzing topics by closeness..."):
+                    try:
+                        rq6_closeness = analyze_topics_by_closeness(
+                            received_with_rt,
+                            st.session_state.fine_doc_topics,
+                            topic_threshold=0.3,
+                            close_contact_min_messages=close_min_messages,
+                            close_contact_min_reply_rate=close_min_reply_rate
+                        )
+                        
+                        # Add top_words column
+                        rq6_closeness['top_words'] = rq6_closeness['topic_id'].apply(
+                            lambda tid: ', '.join([w for w, _ in get_topic_words(
+                                st.session_state.fine_model, 
+                                st.session_state.fine_dictionary, 
+                                tid, 
+                                num_words=30
+                            )])
+                        )
+                        
+                        st.session_state.rq6_closeness = rq6_closeness
+                        st.success("✅ RQ6 analysis complete")
+                    except Exception as e:
+                        st.error(f"❌ Error in RQ6 analysis: {e}")
+                        st.exception(e)
+        
+        if 'rq6_closeness' in st.session_state and 'fine_model' in st.session_state:
+            rq6_closeness = st.session_state.rq6_closeness
+            
+            st.subheader("Topics by Closeness (Odds Ratio)")
+            st.dataframe(rq6_closeness[['topic_id', 'top_words', 'odds_ratio', 'category', 
+                                       'close_frequency', 'acquaintance_frequency', 
+                                       'close_count', 'acquaintance_count']].head(15))
+            
+            fig = plot_topics_by_closeness(rq6_closeness, st.session_state.fine_model, 
+                                          st.session_state.fine_dictionary, top_n=10, use_plotly=True)
+            if fig:
+                try:
+                    st.plotly_chart(fig, use_container_width=True)
+                except:
+                    st.pyplot(fig)
+        
+        # RQ7: Topics by Time of Day (Fine-Grained Model)
+        st.header("🕐 RQ7: Topics by Time of Day")
+        st.markdown("""
+        **Methodology**: Using **fine-grained topic modeling (50 topics)** for higher resolution.
+        Analyze which topics are prevalent during different times of the day.
+        
+        **Fine-Grained Model**: Same 50-topic LDA model to identify time-specific conversation patterns.
+        
+        **Time Periods**:
+        - **Morning**: 6:00 AM - 12:00 PM
+        - **Afternoon**: 12:00 PM - 6:00 PM
+        - **Evening**: 6:00 PM - 10:00 PM
+        - **Night**: 10:00 PM - 6:00 AM
+        
+        **Values Shown**: Normalized frequencies (proportion of messages in each time period assigned to each topic).
+        """)
+        
+        if len(received_with_rt) > 0 and 'fine_doc_topics' in st.session_state:
+            if st.button("Run RQ7 Analysis", key="rq7"):
+                with st.spinner("Analyzing topics by time of day..."):
+                    try:
+                        rq7_time = analyze_topics_by_time_of_day(
+                            received_with_rt,
+                            st.session_state.fine_doc_topics,
+                            topic_threshold=0.3
+                        )
+                        
+                        # Add top_words column
+                        rq7_time['top_words'] = rq7_time['topic_id'].apply(
+                            lambda tid: ', '.join([w for w, _ in get_topic_words(
+                                st.session_state.fine_model, 
+                                st.session_state.fine_dictionary, 
+                                tid, 
+                                num_words=30
+                            )])
+                        )
+                        
+                        st.session_state.rq7_time = rq7_time
+                        st.success("✅ RQ7 analysis complete")
+                    except Exception as e:
+                        st.error(f"❌ Error in RQ7 analysis: {e}")
+                        st.exception(e)
+        
+        if 'rq7_time' in st.session_state and 'fine_model' in st.session_state:
+            rq7_time = st.session_state.rq7_time
+            
+            st.subheader("Topics by Time of Day")
+            # Reorder columns to show top_words first
+            display_cols = ['topic_id', 'top_words', 'morning', 'afternoon', 'evening', 'night']
+            st.dataframe(rq7_time[display_cols].head(30))
+            
+            fig = plot_topics_by_time_heatmap(rq7_time, st.session_state.fine_model, 
+                                             st.session_state.fine_dictionary, use_plotly=True)
+            if fig:
+                try:
+                    st.plotly_chart(fig, use_container_width=True)
+                except:
+                    st.pyplot(fig)
+        
+        # RQ8: Fine-Grained Topics You Tend Not to Engage With
+        st.header("🔬 RQ8: Fine-Grained Topics You Tend Not to Engage With")
+        st.markdown("""
+        **Methodology**: This is a **fine-grained version of RQ1** using TF-IDF + K-Means.
+        
+        Instead of traditional LDA, we use a simpler but effective approach:
+        1. **TF-IDF Vectorization**: Captures word importance in messages
+        2. **Dimensionality Reduction**: SVD (like PCA, but faster)
+        3. **Clustering**: K-Means (fast, reliable clustering)
+        4. **Topic Words**: Top words per cluster from TF-IDF scores
+        
+        **Reluctance Logic**: Same as RQ1 - measures response time and no-reply rate.
+        
+        **Advantages**:
+        - No heavy dependencies (only scikit-learn, already installed)
+        - Fast (completes in seconds)
+        - Reliable results
+        """)
+        
+        # User controls (always show)
+        n_topics_rq8 = st.slider(
+            "Number of fine-grained topics to discover:",
+            min_value=15,
+            max_value=50,
+            value=30,
+            step=5,
+            key="rq8_n_topics",
+            help="More topics = finer granularity. 30 is a good balance."
+        )
+        
+        if len(received_with_rt) > 0 and len(processed_docs) > 0:
+            if st.button("Run RQ8 Analysis", key="rq8"):
+                try:
+                    from simple_topics import train_simple_topic_model
                     
-                    with st.spinner("Computing sentiment scores for all messages..."):
-                        df_with_sentiment = compute_sentiment(df_with_rt)
-                        st.session_state.df_with_sentiment = df_with_sentiment
+                    with st.spinner(f"Training fine-grained topic model ({n_topics_rq8} topics)..."):
+                        # Get raw text (not preprocessed tokens)
+                        raw_texts = received_with_rt['text'].fillna('').tolist()
                         
-                        # Also compute and store summary and trend for chatbot
-                        summary = global_sentiment_summary(df_with_sentiment)
-                        trend = sentiment_over_time(df_with_sentiment, freq='M')
+                        # Filter out empty texts
+                        valid_indices = [i for i, text in enumerate(raw_texts) if text.strip()]
+                        valid_texts = [raw_texts[i] for i in valid_indices]
+                        valid_df = received_with_rt.iloc[valid_indices].copy().reset_index(drop=True)
                         
-                        st.session_state.rq5_sentiment_summary = summary
-                        st.session_state.rq5_sentiment_trend = trend
-                        
-                        st.success(f"✅ Sentiment computed for {len(df_with_sentiment):,} messages")
+                        if len(valid_texts) == 0:
+                            st.error("No valid texts found for topic modeling.")
+                        else:
+                            # Train simple topic model
+                            def progress_update(msg):
+                                st.info(msg)
+                            
+                            simple_model, topic_labels = train_simple_topic_model(
+                                valid_texts,
+                                n_topics=n_topics_rq8,
+                                progress_callback=progress_update
+                            )
+                            
+                            st.info(f"Discovered {n_topics_rq8} fine-grained topics")
+                            
+                            # Rank topics by reluctance
+                            rq8_df = rank_reluctant_topics_embedding(
+                                valid_df,
+                                topic_labels,
+                                simple_model,
+                                cap_minutes=max_gap_minutes
+                            )
+                            
+                            st.session_state.rq8_df = rq8_df
+                            st.session_state.rq8_model = simple_model
+                            st.session_state.rq8_topic_labels = topic_labels
+                            
+                            st.success(f"✅ RQ8 analysis complete - {n_topics_rq8} fine-grained topics discovered")
                 
-                except ImportError:
-                    st.error("❌ vaderSentiment not installed. Run: pip install vaderSentiment")
                 except Exception as e:
-                    st.error(f"❌ Error computing sentiment: {e}")
+                    st.error(f"❌ Error in RQ8 analysis: {e}")
                     st.exception(e)
         
-        # Display sentiment analysis if available
-        if 'df_with_sentiment' in st.session_state:
-            df_with_sentiment = st.session_state.df_with_sentiment
-            
-            from sentiment import global_sentiment_summary, sentiment_over_time, per_chat_sentiment
-            from viz import plot_sentiment_distribution, plot_sentiment_over_time, plot_chat_sentiment_over_time
-            
-            # Global Sentiment Summary
-            st.subheader("📊 Global Sentiment Summary")
-            
-            summary = global_sentiment_summary(df_with_sentiment)
-            
-            # Display metrics
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Average Sentiment", f"{summary['overall']['avg_sentiment']:.3f}")
-                st.caption(f"Total: {summary['overall']['total_messages']:,} messages")
-            with col2:
-                st.metric("% Positive", f"{summary['overall']['pct_positive']:.1f}%")
-            with col3:
-                st.metric("% Negative", f"{summary['overall']['pct_negative']:.1f}%")
-            
-            # Sentiment distribution pie charts
-            st.markdown("**Sentiment Distribution by Message Type**")
-            fig_dist = plot_sentiment_distribution(summary, use_plotly=True)
-            if fig_dist:
-                try:
-                    st.plotly_chart(fig_dist, use_container_width=True)
-                except:
-                    st.pyplot(fig_dist)
-            
-            # Detailed stats table
-            with st.expander("📋 Detailed Statistics"):
-                stats_data = []
-                for key in ['overall', 'out', 'in']:
-                    if key in summary:
-                        label = {'overall': 'Overall', 'out': 'Sent', 'in': 'Received'}[key]
-                        stats_data.append({
-                            'Type': label,
-                            'Total Messages': f"{summary[key]['total_messages']:,}",
-                            'Avg Sentiment': f"{summary[key]['avg_sentiment']:.3f}",
-                            'Median Sentiment': f"{summary[key]['median_sentiment']:.3f}",
-                            '% Positive': f"{summary[key]['pct_positive']:.1f}%",
-                            '% Negative': f"{summary[key]['pct_negative']:.1f}%",
-                            '% Neutral': f"{summary[key]['pct_neutral']:.1f}%"
-                        })
-                st.dataframe(pd.DataFrame(stats_data), use_container_width=True)
-            
-            # Sentiment Over Time
-            st.subheader("📈 Sentiment Over Time")
-            
-            time_freq = st.radio(
-                "Time resolution:",
-                options=['M', 'W', 'D'],
-                format_func=lambda x: {'M': 'Monthly', 'W': 'Weekly', 'D': 'Daily'}[x],
-                horizontal=True,
-                key="rq5_time_freq"
-            )
-            
-            time_df = sentiment_over_time(df_with_sentiment, freq=time_freq)
-            
-            if len(time_df) > 0:
-                fig_time = plot_sentiment_over_time(time_df, use_plotly=True)
-                if fig_time:
+        # Display RQ8 results if available
+        if 'rq8_df' in st.session_state:
+                rq8_df = st.session_state.rq8_df
+                
+                st.subheader("Fine-Grained Avoided Topics")
+                st.markdown("""
+                These are fine-grained topics you tend to avoid or delay responding to.
+                Each topic is discovered automatically based on semantic similarity of messages.
+                """)
+                
+                # Show table
+                display_cols = ['topic_id', 'top_words', 'reluctance_score', 'frequency', 'final_rank']
+                st.dataframe(rq8_df[display_cols].head(20))
+                
+                # Plot
+                fig = plot_reluctant_embedding_topics(rq8_df, top_n=15, use_plotly=True)
+                if fig:
                     try:
-                        st.plotly_chart(fig_time, use_container_width=True)
+                        st.plotly_chart(fig, use_container_width=True)
                     except:
-                        st.pyplot(fig_time)
-            else:
-                st.info("Not enough data for time series analysis")
-            
-            # Top Contacts by Positive Sentiment
-            st.subheader("👥 Top Contacts by Positive Sentiment")
-            st.markdown("Identify contacts with the most positive conversations.")
-            
-            from sentiment import per_contact_sentiment_stats
-            from viz import plot_top_contacts_by_positive_sentiment
-            
-            # Compute per-contact stats
-            contact_sentiment_stats = per_contact_sentiment_stats(df_with_sentiment)
-            
-            if len(contact_sentiment_stats) > 0:
-                # Filter control
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    min_messages_sentiment = st.slider(
-                        "Minimum messages with contact:",
-                        min_value=5,
-                        max_value=int(contact_sentiment_stats['total_messages'].max()),
-                        value=50,
-                        step=5,
-                        key="rq5_min_messages"
-                    )
-                with col2:
-                    top_n_contacts = st.number_input(
-                        "Number of contacts to show:",
-                        min_value=5,
-                        max_value=30,
-                        value=10,
-                        step=1,
-                        key="rq5_top_n"
-                    )
-                
-                # Filter by minimum messages
-                filtered_stats = contact_sentiment_stats[
-                    contact_sentiment_stats['total_messages'] >= min_messages_sentiment
-                ].copy()
-                
-                if len(filtered_stats) > 0:
-                    # Create tabs for different views
-                    tab1, tab2, tab3 = st.tabs(["Overall", "Sent Messages", "Received Messages"])
-                    
-                    with tab1:
-                        st.markdown("**All messages (sent + received) with each contact**")
-                        fig_overall = plot_top_contacts_by_positive_sentiment(
-                            filtered_stats,
-                            metric_type='overall',
-                            top_n=top_n_contacts,
-                            use_plotly=True
-                        )
-                        if fig_overall:
-                            try:
-                                st.plotly_chart(fig_overall, use_container_width=True)
-                            except:
-                                st.pyplot(fig_overall)
-                    
-                    with tab2:
-                        st.markdown("**Messages you sent to each contact**")
-                        fig_sent = plot_top_contacts_by_positive_sentiment(
-                            filtered_stats,
-                            metric_type='sent',
-                            top_n=top_n_contacts,
-                            use_plotly=True
-                        )
-                        if fig_sent:
-                            try:
-                                st.plotly_chart(fig_sent, use_container_width=True)
-                            except:
-                                st.pyplot(fig_sent)
-                    
-                    with tab3:
-                        st.markdown("**Messages you received from each contact**")
-                        fig_received = plot_top_contacts_by_positive_sentiment(
-                            filtered_stats,
-                            metric_type='received',
-                            top_n=top_n_contacts,
-                            use_plotly=True
-                        )
-                        if fig_received:
-                            try:
-                                st.plotly_chart(fig_received, use_container_width=True)
-                            except:
-                                st.pyplot(fig_received)
-                else:
-                    st.warning(f"No contacts with at least {min_messages_sentiment} messages. Lower the minimum threshold.")
-            else:
-                st.info("No contact data available for sentiment analysis")
-            
-            # Per-Chat Sentiment Explorer
-            st.subheader("🔍 Per-Chat Sentiment Explorer")
-            st.markdown("Analyze sentiment for individual chats.")
-            
-            # Get unique chats
-            chat_options = []
-            if 'chat_name' in df_with_sentiment.columns:
-                chat_names = df_with_sentiment['chat_name'].dropna().unique().tolist()
-                chat_options.extend(chat_names)
-            if 'participant' in df_with_sentiment.columns:
-                participants = df_with_sentiment['participant'].dropna().unique().tolist()
-                for p in participants:
-                    if p not in chat_options and p != "UNKNOWN":
-                        chat_options.append(p)
-            
-            chat_options = sorted(chat_options)
-            
-            if len(chat_options) > 0:
-                selected_chat = st.selectbox(
-                    "Select a chat:",
-                    options=[""] + chat_options,
-                    key="rq5_chat_select"
-                )
-                
-                if selected_chat:
-                    chat_sent = per_chat_sentiment(df_with_sentiment, selected_chat)
-                    
-                    if chat_sent:
-                        st.markdown(f"**Sentiment Analysis: {selected_chat}**")
-                        
-                        # Overall metrics
-                        col1, col2, col3, col4 = st.columns(4)
-                        with col1:
-                            st.metric("Total Messages", f"{chat_sent['total_messages']:,}")
-                        with col2:
-                            st.metric("Avg Sentiment", f"{chat_sent['overall']['avg_sentiment']:.3f}")
-                        with col3:
-                            st.metric("% Positive", f"{chat_sent['overall']['pct_positive']:.1f}%")
-                        with col4:
-                            st.metric("% Negative", f"{chat_sent['overall']['pct_negative']:.1f}%")
-                        
-                        # Sent vs Received comparison
-                        if 'in' in chat_sent and 'out' in chat_sent:
-                            st.markdown("**Sent vs Received Comparison**")
-                            comp_col1, comp_col2 = st.columns(2)
-                            
-                            with comp_col1:
-                                st.markdown("**Messages Sent**")
-                                st.metric("Avg Sentiment", f"{chat_sent['out']['avg_sentiment']:.3f}")
-                                st.caption(f"Positive: {chat_sent['out']['pct_positive']:.1f}% | "
-                                          f"Negative: {chat_sent['out']['pct_negative']:.1f}% | "
-                                          f"Neutral: {chat_sent['out']['pct_neutral']:.1f}%")
-                            
-                            with comp_col2:
-                                st.markdown("**Messages Received**")
-                                st.metric("Avg Sentiment", f"{chat_sent['in']['avg_sentiment']:.3f}")
-                                st.caption(f"Positive: {chat_sent['in']['pct_positive']:.1f}% | "
-                                          f"Negative: {chat_sent['in']['pct_negative']:.1f}% | "
-                                          f"Neutral: {chat_sent['in']['pct_neutral']:.1f}%")
-                        
-                        # Time series for this chat
-                        if 'time_series' in chat_sent and len(chat_sent['time_series']) > 0:
-                            st.markdown("**Sentiment Trend Over Time**")
-                            fig_chat = plot_chat_sentiment_over_time(
-                                chat_sent['time_series'], 
-                                selected_chat, 
-                                use_plotly=True
-                            )
-                            if fig_chat:
-                                try:
-                                    st.plotly_chart(fig_chat, use_container_width=True)
-                                except:
-                                    st.pyplot(fig_chat)
-                    else:
-                        st.warning(f"No messages found for {selected_chat}")
-            else:
-                st.info("No chats available for analysis")
+                        st.pyplot(fig)
         
-        # RQ6: GPT-Powered Texting Behavior Chatbot
-        st.header("🤖 RQ6: Ask a Chatbot About Your Texting Behavior")
+        # RQ9: GPT-Powered Texting Behavior Chatbot
+        st.header("🤖 RQ9: Ask a Chatbot About Your Texting Behavior")
         st.markdown("""
         **Ask questions about your texting patterns in plain English!**
         
         This chatbot uses GPT-4 to interpret your texting behavior based on **aggregated statistics only**.
         
         **Privacy Guarantee**: 
-        - ✅ Only sends aggregated patterns from RQ1-5
+        - ✅ Only sends aggregated patterns from RQ1-8
         - ✅ NO raw message texts are sent to the API
         - ✅ NO phone numbers, emails, or contact names are sent
         - ✅ Contacts are anonymized as "Contact A", "Contact B", etc.
@@ -1780,8 +1689,8 @@ def main():
             st.success("✅ API key entered (only stored in session)")
             
             # Initialize conversation history
-            if 'rq6_conversation' not in st.session_state:
-                st.session_state.rq6_conversation = []
+            if 'rq9_conversation' not in st.session_state:
+                st.session_state.rq9_conversation = []
             
             # Build behavior summary from all available RQ results
             rq_results = {
@@ -1790,8 +1699,10 @@ def main():
                 'rq2_contact_topic': st.session_state.get('rq2_contact_topic'),
                 'rq3_stats': st.session_state.get('rq3_stats'),
                 'rq4_starters': st.session_state.get('rq4_starters'),
-                'rq5_sentiment_summary': st.session_state.get('rq5_sentiment_summary'),
-                'rq5_sentiment_trend': st.session_state.get('rq5_sentiment_trend'),
+                'rq5_enders': st.session_state.get('rq5_enders'),
+                'rq6_closeness': st.session_state.get('rq6_closeness'),
+                'rq7_time': st.session_state.get('rq7_time'),
+                'rq8_df': st.session_state.get('rq8_df'),
                 'stats': {
                     'total_messages': len(df) if len(df) > 0 else 0,
                     'messages_received': len(df[df['direction'] == 'in']) if len(df) > 0 else 0,
@@ -1807,73 +1718,17 @@ def main():
                 rq_results['rq2_topic_words'] is not None,
                 rq_results['rq3_stats'] is not None,
                 rq_results['rq4_starters'] is not None,
-                rq_results['rq5_sentiment_summary'] is not None
+                rq_results['rq5_enders'] is not None,
+                rq_results['rq6_closeness'] is not None,
+                rq_results['rq7_time'] is not None,
+                rq_results['rq8_df'] is not None
             ])
             
             if not has_results:
-                st.warning("⚠️ Run at least one RQ analysis (RQ1-5) before using the chatbot.")
+                st.warning("⚠️ Run at least one RQ analysis (RQ1-8) before using the chatbot.")
             else:
-                # Get deidentify setting (default to True if not set)
-                deidentify_for_chatbot = st.session_state.get('deidentify', True)
-                
                 # Build behavior summary (rebuild on each run to capture latest results)
-                behavior_summary = build_behavior_summary(rq_results, deidentify=deidentify_for_chatbot)
-                
-                # Store in session state, but allow editing
-                if 'rq6_behavior_summary' not in st.session_state:
-                    st.session_state.rq6_behavior_summary = behavior_summary
-                
-                # Allow user to view and edit the system context
-                with st.expander("🔧 View/Edit System Context (Advanced)", expanded=False):
-                    st.markdown("""
-                    **What is this?** This is the behavior summary being sent to GPT-4 about your texting behavior.
-                    You can view it to see what data the chatbot has access to, or edit it if you want to customize the context.
-                    
-                    **Note:** The system also includes instructions to GPT-4 (not shown here) that tell it how to interpret this data.
-                    """)
-                    
-                    # Show the behavior summary for editing
-                    edited_summary = st.text_area(
-                        "Behavior Summary (editable):",
-                        value=st.session_state.rq6_behavior_summary,
-                        height=500,
-                        key="rq6_edited_summary",
-                        help="Edit this text to customize what context is sent to GPT-4. This is the aggregated statistics about your texting behavior."
-                    )
-                    
-                    # Show preview of full system prompt
-                    with st.expander("📋 Preview Full System Prompt (read-only)"):
-                        system_prompt_preview = f"""You are a helpful assistant that interprets a user's iMessage texting behavior.
-
-You have access ONLY to aggregated statistics and patterns from their texting analysis.
-You do NOT have access to raw messages, contact names, phone numbers, or any personally identifiable information.
-
-Base ALL your answers strictly on the aggregated patterns provided below.
-
-If the user asks about specific messages or contacts, explain that you only have access to aggregated patterns, not individual messages.
-
-AGGREGATED BEHAVIOR PATTERNS:
-{edited_summary}
-
-When answering:
-- Be insightful and analytical
-- Use the specific metrics and patterns provided
-- Avoid making up information not in the summary
-- If a pattern isn't in the data, say so
-- Be friendly and conversational"""
-                        st.code(system_prompt_preview, language=None)
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.button("✅ Use Edited Summary", key="rq6_use_edited"):
-                            st.session_state.rq6_behavior_summary = edited_summary
-                            st.success("✅ Updated! Your edited context will be used for future questions.")
-                            st.rerun()
-                    with col2:
-                        if st.button("🔄 Reset to Original", key="rq6_reset_context"):
-                            st.session_state.rq6_behavior_summary = behavior_summary
-                            st.success("✅ Reset to original context.")
-                            st.rerun()
+                st.session_state.rq9_behavior_summary = build_behavior_summary(rq_results)
                 
                 # Show example questions
                 with st.expander("💡 Example Questions"):
@@ -1888,18 +1743,18 @@ When answering:
                 user_question = st.text_area(
                     "Ask a question about your texting patterns:",
                     placeholder="e.g., What topics do I reply to the fastest?",
-                    key="rq6_question_input",
+                    key="rq9_question_input",
                     height=100
                 )
                 
                 col1, col2 = st.columns([1, 4])
                 with col1:
-                    ask_button = st.button("Ask", key="rq6_ask", type="primary")
+                    ask_button = st.button("Ask", key="rq9_ask", type="primary")
                 with col2:
-                    clear_button = st.button("Clear Conversation", key="rq6_clear")
+                    clear_button = st.button("Clear Conversation", key="rq9_clear")
                 
                 if clear_button:
-                    st.session_state.rq6_conversation = []
+                    st.session_state.rq9_conversation = []
                     st.rerun()
                 
                 if ask_button and user_question.strip():
@@ -1907,42 +1762,22 @@ When answering:
                         try:
                             response, updated_history = run_rq9_chatbot(
                                 user_question,
-                                st.session_state.rq6_behavior_summary,
+                                st.session_state.rq9_behavior_summary,
                                 api_key,
-                                st.session_state.rq6_conversation
+                                st.session_state.rq9_conversation
                             )
                             
-                            st.session_state.rq6_conversation = updated_history
+                            st.session_state.rq9_conversation = updated_history
                             
                         except Exception as e:
-                            error_str = str(e)
-                            st.error(f"❌ Error calling OpenAI API: {error_str}")
-                            
-                            # Provide specific guidance based on error type
-                            if "insufficient_quota" in error_str or "429" in error_str:
-                                st.warning("""
-                                **Quota/Billing Issue Detected:**
-                                
-                                This error typically means:
-                                1. **Spending limit reached**: Check your OpenAI account billing settings at https://platform.openai.com/account/billing
-                                2. **Payment method issue**: Ensure your payment method is valid and up to date
-                                3. **Account mismatch**: Verify the API key belongs to the account you think it does
-                                4. **Billing cycle reset**: Your quota may reset at the start of a new billing period
-                                
-                                **To resolve:**
-                                - Visit https://platform.openai.com/account/billing
-                                - Check your usage and spending limits
-                                - Update payment method if needed
-                                - Wait for billing cycle reset if you've hit monthly limits
-                                """)
-                            else:
-                                st.info("Check that your API key is valid and you have credits available.")
+                            st.error(f"❌ Error calling OpenAI API: {e}")
+                            st.info("Check that your API key is valid and you have credits available.")
                 
                 # Display conversation history
-                if st.session_state.rq6_conversation:
+                if st.session_state.rq9_conversation:
                     st.subheader("Conversation")
                     
-                    for msg in st.session_state.rq6_conversation:
+                    for msg in st.session_state.rq9_conversation:
                         if msg['role'] == 'user':
                             with st.chat_message("user"):
                                 st.write(msg['content'])

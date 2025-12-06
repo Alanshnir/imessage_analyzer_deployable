@@ -22,18 +22,33 @@ A privacy-first, local-only macOS application for analyzing your iMessage conver
 - 🔐 **De-identification**: Automatically pseudonymizes participants by default.
 - 🤖 **AI Chatbot**: Ask questions about your texting patterns using GPT (optional, requires API key)
 
-## Local Application (No Python Needed)
+## Quick Start
 
-### Download Standalone App
+### Installation
 
-1. **Go to [Releases](https://github.com/Alanshnir/imessage_analyzer_deployable/releases)**
-2. **Download the single executable file:**
-   - `run_analyzer` (or download `imessage_analyzer_macos.zip` and extract)
-3. **Double-click the file** - that's it! No installation needed.
+1. **Clone or download** this repository:
+   ```bash
+   git clone https://github.com/Alanshnir/imessage_analyzer_deployable.git
+   cd imessage_analyzer
+   ```
 
-Your browser will open automatically to **http://localhost:8501**
+2. **Install dependencies:**
+   ```bash
+   pip3 install -r requirements.txt
+   python3 -c "import nltk; nltk.download('stopwords'); nltk.download('wordnet'); nltk.download('punkt')"
+   ```
 
-**Note:** This is a single-file executable for macOS. No folders, no installation - just download and run!
+3. **Run the app:**
+   ```bash
+   streamlit run app.py
+   ```
+
+4. Your browser will open automatically to **http://localhost:8501**
+
+**Requirements:**
+- macOS 10.14 or later
+- Python 3.10 or higher
+- Internet connection (for first-time dependency installation)
 
 ### Upload and Analyze
 
@@ -51,9 +66,6 @@ Your browser will open automatically to **http://localhost:8501**
 - ~500MB free disk space
 - **No Python installation required** - the app is fully self-contained
 
-### For Developers: Building Your Own Executable
-
-See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions on building standalone executables.
 
 ## Requirements (For Developers)
 
@@ -141,21 +153,6 @@ streamlit run viewer.py
 - **Exploratory Data Analysis**: Response times, text lengths, message counts, and daily trends
 - **Customizable Settings**: Adjust topic count, preprocessing options, response time thresholds, and more
 
-## Building a Standalone Executable
-
-Want to distribute the app as a single executable? See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions.
-
-**Quick build:**
-```bash
-pip install pyinstaller
-python -c "import nltk; nltk.download('stopwords'); nltk.download('wordnet'); nltk.download('punkt')"
-pyinstaller run_analyzer.spec
-```
-
-The executable will be in:
-- `dist/run_analyzer` (single file executable for macOS)
-
-**Note:** The spec file is configured for `onefile=True`, creating a single executable file that users can download and run directly - no folder structure needed!
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for complete build instructions and GitHub release setup.
 

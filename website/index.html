@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iMessage Analyzer - Privacy-First Text Analysis</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        
+        .hero {
+            background: white;
+            border-radius: 20px;
+            padding: 60px 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        h1 {
+            font-size: 3em;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+        
+        .tagline {
+            font-size: 1.3em;
+            color: #666;
+            margin-bottom: 40px;
+        }
+        
+        .download-btn {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 20px 50px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-size: 1.3em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        
+        .download-btn:hover {
+            background: #764ba2;
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(118, 75, 162, 0.5);
+        }
+        
+        .requirements {
+            margin-top: 30px;
+            font-size: 0.95em;
+            color: #888;
+        }
+        
+        .content {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+        }
+        
+        h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 2em;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        .feature {
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .feature h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .rq-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .rq-item {
+            padding: 15px;
+            background: #f0f4ff;
+            border-radius: 8px;
+        }
+        
+        .rq-item strong {
+            color: #667eea;
+        }
+        
+        .privacy-badge {
+            display: inline-block;
+            background: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin: 20px 0;
+        }
+        
+        .steps {
+            counter-reset: step-counter;
+            list-style: none;
+        }
+        
+        .steps li {
+            counter-increment: step-counter;
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            position: relative;
+            padding-left: 80px;
+        }
+        
+        .steps li::before {
+            content: counter(step-counter);
+            position: absolute;
+            left: 20px;
+            top: 20px;
+            background: #667eea;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.3em;
+        }
+        
+        code {
+            background: #f4f4f4;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 40px;
+            padding: 20px;
+        }
+        
+        .footer a {
+            color: white;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Hero Section -->
+        <div class="hero">
+            <h1>💬 iMessage Analyzer</h1>
+            <p class="tagline">Privacy-first local analysis of your iMessage conversations</p>
+            
+            <a href="iMessage_Analyzer_macOS.zip" class="download-btn" download>
+                📥 Download for macOS
+            </a>
+            
+            <div class="requirements">
+                <strong>Requirements:</strong> macOS • No Python needed • ~500MB disk space
+            </div>
+            
+            <div class="privacy-badge">
+                🔒 100% Local Processing - Your Data Never Leaves Your Computer
+            </div>
+        </div>
+        
+        <!-- Features -->
+        <div class="content">
+            <h2>✨ Features</h2>
+            <div class="features">
+                <div class="feature">
+                    <h3>🔒 Privacy-First</h3>
+                    <p>All processing happens locally. No data sent to external servers.</p>
+                </div>
+                <div class="feature">
+                    <h3>📊 9 Research Questions</h3>
+                    <p>Deep insights into your texting patterns and behavior.</p>
+                </div>
+                <div class="feature">
+                    <h3>🎨 Beautiful Visualizations</h3>
+                    <p>Interactive charts powered by Plotly.</p>
+                </div>
+                <div class="feature">
+                    <h3>🤖 AI Chatbot</h3>
+                    <p>Ask questions about your patterns using GPT (optional).</p>
+                </div>
+                <div class="feature">
+                    <h3>🔐 De-identification</h3>
+                    <p>Automatically masks contact names and numbers.</p>
+                </div>
+                <div class="feature">
+                    <h3>📁 Export Results</h3>
+                    <p>Generate HTML reports and CSV exports.</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Research Questions -->
+        <div class="content">
+            <h2>🔬 What You Can Discover</h2>
+            <div class="rq-list">
+                <div class="rq-item">
+                    <strong>RQ1:</strong> Topics you tend not to engage with
+                </div>
+                <div class="rq-item">
+                    <strong>RQ2:</strong> Most commonly discussed topics
+                </div>
+                <div class="rq-item">
+                    <strong>RQ3:</strong> Group vs one-on-one responsiveness
+                </div>
+                <div class="rq-item">
+                    <strong>RQ4:</strong> Conversation starter topics
+                </div>
+                <div class="rq-item">
+                    <strong>RQ5:</strong> Conversation ender topics
+                </div>
+                <div class="rq-item">
+                    <strong>RQ6:</strong> Close contacts vs acquaintances
+                </div>
+                <div class="rq-item">
+                    <strong>RQ7:</strong> Topics by time of day
+                </div>
+                <div class="rq-item">
+                    <strong>RQ8:</strong> Fine-grained avoided topics
+                </div>
+                <div class="rq-item">
+                    <strong>RQ9:</strong> AI chatbot for custom queries
+                </div>
+            </div>
+        </div>
+        
+        <!-- How to Use -->
+        <div class="content">
+            <h2>🚀 How to Use</h2>
+            <ol class="steps">
+                <li>
+                    <strong>Download & Unzip</strong><br>
+                    Download the app above and unzip it.
+                </li>
+                <li>
+                    <strong>Open the App</strong><br>
+                    Double-click <code>run_analyzer.app</code>.<br>
+                    <em>Note: macOS may show "unidentified developer" - right-click and select "Open"</em>
+                </li>
+                <li>
+                    <strong>Find Your chat.db</strong><br>
+                    Press <code>Cmd+Shift+G</code> in Finder and type:<br>
+                    <code>~/Library/Messages</code><br>
+                    Copy <code>chat.db</code> (and optionally .wal/.shm files)
+                </li>
+                <li>
+                    <strong>Upload & Analyze</strong><br>
+                    Upload your chat.db file in the app and run any of the 9 research questions!
+                </li>
+            </ol>
+        </div>
+        
+        <!-- Privacy -->
+        <div class="content">
+            <h2>🔒 Privacy & Security</h2>
+            <p><strong>Your privacy is our top priority:</strong></p>
+            <ul style="margin: 20px 0 20px 30px;">
+                <li>✅ All analysis happens <strong>locally on your computer</strong></li>
+                <li>✅ No data uploaded to external servers</li>
+                <li>✅ Contacts are automatically de-identified</li>
+                <li>✅ Optional AI chatbot (RQ9) only sends <strong>aggregated statistics</strong>, never raw messages</li>
+                <li>✅ Open source - review the code on <a href="https://github.com/Alanshnir/imessage_analyzer_deployable" target="_blank">GitHub</a></li>
+            </ul>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p>
+                <a href="https://github.com/Alanshnir/imessage_analyzer_deployable" target="_blank">View on GitHub</a> • 
+                Built with ❤️ for privacy-conscious users
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+
