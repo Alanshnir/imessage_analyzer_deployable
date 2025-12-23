@@ -18,6 +18,8 @@ A privacy-first, local-only macOS application for analyzing your iMessage conver
 5. **RQ5**: Sentiment analysis (positive/negative/neutral message analysis)
 6. **RQ6**: GPT-powered chatbot for querying your behavior (AI-powered insights)
 
+We published a paper with preliminary findings and applications of our tool, which can be accessed here: https://arxiv.org/abs/2512.11079
+
 ## Features
 
 - 🔒 **Privacy-first**: All processing happens locally on your device. No data is sent over the network.
